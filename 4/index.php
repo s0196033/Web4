@@ -1,20 +1,41 @@
 <?php
 header('Content-Type: text/html; charset=UTF-8');
 
-// Функции для работы с cookies
 function getFormData($field) {
+    if ($field == 'bio') {
+        $value = '';
+        for ($i = 1; $i <= 10; $i++) {
+            if (isset($_COOKIE["form_bio_{$i}"])) {
+                $value .= $_COOKIE["form_bio_{$i}"];
+            } else {
+                break;
+            }
+        }
+        return $value;
+    }
     return $_COOKIE["form_$field"] ?? '';
 }
 
 function setFormCookie($name, $value, $expire = 0) {
-    setcookie("form_$name", $value, $expire, '/');
+     if ($name == 'bio') {
+        $chunks = str_split($value, 3500);
+        for ($i = 0; $i < count($chunks); $i++) {
+            setcookie("form_bio_" . ($i + 1), $chunks[$i], $expire, '/');
+        }
+        // Удаляем лишние части
+        for ($i = count($chunks) + 1; $i <= 10; $i++) {
+            setcookie("form_bio_{$i}", '', time() - 3600, '/');
+        }
+    } else {
+        setcookie("form_$name", $value, $expire, '/');
+    }
 }
+
 
 function setErrorCookie($name, $message) {
     setcookie("error_$name", $message, 0, '/');
 }
 
-// Обработка POST-запроса (отправка формы)
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $errors = [];
     $allowedLanguages = ['Pascal', 'C', 'C++', 'JavaScript', 'PHP', 'Python', 'Java', 'Haskel', 'Clojure', 'Prolog', 'Scala', 'Go'];
@@ -32,7 +53,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     }
     setFormCookie('fio', $_POST['fio']);
 
-    // Валидация телефона
     if (empty($_POST['phone'])) {
         $errors['phone'] = 'Заполните телефон.';
         setErrorCookie('phone', $errors['phone']);
@@ -42,7 +62,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     }
     setFormCookie('phone', $_POST['phone']);
 
-    // Валидация email
     if (empty($_POST['email'])) {
         $errors['email'] = 'Заполните email.';
         setErrorCookie('email', $errors['email']);
@@ -52,7 +71,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     }
     setFormCookie('email', $_POST['email']);
 
-    // Валидация даты рождения
     if (empty($_POST['birthdate'])) {
         $errors['birthdate'] = 'Укажите дату рождения';
         setErrorCookie('birthdate', $errors['birthdate']);
@@ -67,7 +85,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     }
     setFormCookie('birthdate', $_POST['birthdate']);
 
-    // Валидация пола
     if (empty($_POST['gender'])) {
         $errors['gender'] = 'Укажите пол';
         setErrorCookie('gender', $errors['gender']);
@@ -77,7 +94,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     }
     setFormCookie('gender', $_POST['gender']);
 
-    // Валидация языков программирования
     if (empty($_POST['languages'])) {
         $errors['languages'] = 'Выберите хотя бы один язык';
         setErrorCookie('languages', $errors['languages']);
@@ -92,7 +108,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         setFormCookie('languages', implode(',', $_POST['languages']));
     }
 
-    // Валидация биографии
     if (empty($_POST['bio'])) {
         $errors['bio'] = 'Заполните биографию';
         setErrorCookie('bio', $errors['bio']);
@@ -102,7 +117,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     }
     setFormCookie('bio', $_POST['bio']);
 
-    // Валидация чекбокса
     if (empty($_POST['contract'])) {
         $errors['contract'] = 'Необходимо согласие';
         setErrorCookie('contract', $errors['contract']);
@@ -110,13 +124,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         setFormCookie('contract', '1');
     }
 
-    // Если есть ошибки — перенаправляем обратно
     if (!empty($errors)) {
         header('Location: index.php');
         exit();
     }
 
-    // Подключение к БД
     $user = 'u82392';
     $pass = '1685352';
     $dbname = 'u82392';
@@ -126,7 +138,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         ]);
         $db->beginTransaction();
 
-        // Сохранение основной информации
         $stmt = $db->prepare("INSERT INTO applications (fio, phone, email, birthdate, gender, bio, contract_agreed)
                               VALUES (?, ?, ?, ?, ?, ?, ?)");
         $stmt->execute([
@@ -140,7 +151,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         ]);
         $applicationId = $db->lastInsertId();
 
-        // Сохранение языков
         $stmt = $db->prepare("INSERT INTO application_languages (application_id, language_id)
                               SELECT ?, id FROM programming_languages WHERE name = ?");
         foreach ($_POST['languages'] as $lang) {
@@ -149,7 +159,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
         $db->commit();
 
-        // Очищаем cookies с данными формы и ошибками
         foreach ($_COOKIE as $name => $value) {
             if (strpos($name, 'form_') === 0 || strpos($name, 'error_') === 0) {
                 setcookie($name, '', time() - 3600, '/');
@@ -179,98 +188,97 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 </head>
 <body>
     <div class="form-group">
-    <h1>Анкета</h1>
-    <?php if (isset($_GET['success'])): ?>
-        <div class="success">Спасибо, результаты сохранены. ID: <?= htmlspecialchars($_GET['id']) ?></div>
-    <?php endif; ?>
-    <?php if (isset($_COOKIE['error_db'])): ?>
-        <div class="error"><?= htmlspecialchars($_COOKIE['error_db']) ?></div>
-    <?php endif; ?>
-    <form action="index.php" method="POST">
-        
-            <label for="fio">ФИО:</label>
-            <input type="text" id="fio" name="fio" value="<?= htmlspecialchars(getFormData('fio')) ?>"
-                   class="<?= isset($_COOKIE['error_fio']) ? 'error-field' : '' ?>">
-            <?php if (isset($_COOKIE['error_fio'])): ?>
-                <div class="error"><?= htmlspecialchars($_COOKIE['error_fio']) ?></div>
-            <?php endif; ?>
+        <h1>Анкета</h1>
+        <?php if (isset($_GET['success'])): ?>
+            <div class="success">Спасибо, результаты сохранены. ID: <?= htmlspecialchars($_GET['id']) ?></div>
+        <?php endif; ?>
+        <?php if (isset($_COOKIE['error_db'])): ?>
+            <div class="error"><?= htmlspecialchars($_COOKIE['error_db']) ?></div>
+        <?php endif; ?>
+        <form action="index.php" method="POST">
+                <label for="fio">ФИО:</label>
+                <input type="text" id="fio" name="fio" value="<?= htmlspecialchars(getFormData('fio')) ?>"
+                    class="<?= isset($_COOKIE['error_fio']) ? 'error-field' : '' ?>">
+                <?php if (isset($_COOKIE['error_fio'])): ?>
+                    <div class="error"><?= htmlspecialchars($_COOKIE['error_fio']) ?></div>
+                <?php endif; ?>
 
-            <label for="phone">Телефон:</label>
-            <input type="tel" id="phone" name="phone" value="<?= htmlspecialchars(getFormData('phone')) ?>"
-                   class="<?= isset($_COOKIE['error_phone']) ? 'error-field' : '' ?>">
-            <?php if (isset($_COOKIE['error_phone'])): ?>
-                <div class="error"><?= htmlspecialchars($_COOKIE['error_phone']) ?></div>
-            <?php endif; ?>
+                <label for="phone">Телефон:</label>
+                <input type="tel" id="phone" name="phone" value="<?= htmlspecialchars(getFormData('phone')) ?>"
+                    class="<?= isset($_COOKIE['error_phone']) ? 'error-field' : '' ?>">
+                <?php if (isset($_COOKIE['error_phone'])): ?>
+                    <div class="error"><?= htmlspecialchars($_COOKIE['error_phone']) ?></div>
+                <?php endif; ?>
 
-            <label for="email">Email:</label>
-            <input type="email" id="email" name="email" value="<?= htmlspecialchars(getFormData('email')) ?>"
-                   class="<?= isset($_COOKIE['error_email']) ? 'error-field' : '' ?>">
-            <?php if (isset($_COOKIE['error_email'])): ?>
-                <div class="error"><?= htmlspecialchars($_COOKIE['error_email']) ?></div>
-            <?php endif; ?>
+                <label for="email">Email:</label>
+                <input type="email" id="email" name="email" value="<?= htmlspecialchars(getFormData('email')) ?>"
+                    class="<?= isset($_COOKIE['error_email']) ? 'error-field' : '' ?>">
+                <?php if (isset($_COOKIE['error_email'])): ?>
+                    <div class="error"><?= htmlspecialchars($_COOKIE['error_email']) ?></div>
+                <?php endif; ?>
 
 
-            <label for="birthdate">Дата рождения:</label>
-            <input type="date" id="birthdate" name="birthdate" value="<?= htmlspecialchars(getFormData('birthdate')) ?>"
-                   class="<?= isset($_COOKIE['error_birthdate']) ? 'error-field' : '' ?>">
-            <?php if (isset($_COOKIE['error_birthdate'])): ?>
-                <div class="error"><?= htmlspecialchars($_COOKIE['error_birthdate']) ?></div>
-            <?php endif; ?>
+                <label for="birthdate">Дата рождения:</label>
+                <input type="date" id="birthdate" name="birthdate" value="<?= htmlspecialchars(getFormData('birthdate')) ?>"
+                    class="<?= isset($_COOKIE['error_birthdate']) ? 'error-field' : '' ?>">
+                <?php if (isset($_COOKIE['error_birthdate'])): ?>
+                    <div class="error"><?= htmlspecialchars($_COOKIE['error_birthdate']) ?></div>
+                <?php endif; ?>
 
-            <label>Пол:</label>
-            <div class="radio-group">
-                <input type="radio" id="male" name="gender" value="male"
-                       <?= getFormData('gender') == 'male' ? 'checked' : '' ?>
-                       class="<?= isset($_COOKIE['error_gender']) ? 'error-field' : '' ?>">
-                <label for="male">Мужской</label>
-            </div>
-            <div class="radio-group">
-                <input type="radio" id="female" name="gender" value="female"
-                       <?= getFormData('gender') == 'female' ? 'checked' : '' ?>
-                       class="<?= isset($_COOKIE['error_gender']) ? 'error-field' : '' ?>">
-                <label for="female">Женский</label>
-            </div>
-            <?php if (isset($_COOKIE['error_gender'])): ?>
-                <div class="error"><?= htmlspecialchars($_COOKIE['error_gender']) ?></div>
-            <?php endif; ?>
+                <label>Пол:</label>
+                <div class="radio-group">
+                    <input type="radio" id="male" name="gender" value="male"
+                        <?= getFormData('gender') == 'male' ? 'checked' : '' ?>
+                        class="<?= isset($_COOKIE['error_gender']) ? 'error-field' : '' ?>">
+                    <label for="male">Мужской</label>
+                </div>
+                <div class="radio-group">
+                    <input type="radio" id="female" name="gender" value="female"
+                        <?= getFormData('gender') == 'female' ? 'checked' : '' ?>
+                        class="<?= isset($_COOKIE['error_gender']) ? 'error-field' : '' ?>">
+                    <label for="female">Женский</label>
+                </div>
+                <?php if (isset($_COOKIE['error_gender'])): ?>
+                    <div class="error"><?= htmlspecialchars($_COOKIE['error_gender']) ?></div>
+                <?php endif; ?>
 
-            <label for="languages">Любимый язык программирования:</label>
-            <select id="languages" name="languages[]" multiple="multiple"
-                    class="<?= isset($_COOKIE['error_languages']) ? 'error-field' : '' ?>">
-                <?php
-                $selectedLangs = explode(',', getFormData('languages'));
-                $options = ['Pascal', 'C', 'C++', 'JavaScript', 'PHP', 'Python', 'Java', 'Haskel', 'Clojure', 'Prolog', 'Scala', 'Go'];
-                foreach ($options as $lang): ?>
-                    <option value="<?= $lang ?>"
-                            <?= in_array($lang, $selectedLangs) ? 'selected' : '' ?>>
-                        <?= $lang ?>
-                    </option>
-                <?php endforeach; ?>
-            </select>
-            <?php if (isset($_COOKIE['error_languages'])): ?>
-                <div class="error"><?= htmlspecialchars($_COOKIE['error_languages']) ?></div>
-            <?php endif; ?>
+                <label for="languages">Любимый язык программирования:</label>
+                <select id="languages" name="languages[]" multiple="multiple"
+                        class="<?= isset($_COOKIE['error_languages']) ? 'error-field' : '' ?>">
+                    <?php
+                    $selectedLangs = explode(',', getFormData('languages'));
+                    $options = ['Pascal', 'C', 'C++', 'JavaScript', 'PHP', 'Python', 'Java', 'Haskel', 'Clojure', 'Prolog', 'Scala', 'Go'];
+                    foreach ($options as $lang): ?>
+                        <option value="<?= $lang ?>"
+                                <?= in_array($lang, $selectedLangs) ? 'selected' : '' ?>>
+                            <?= $lang ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+                <?php if (isset($_COOKIE['error_languages'])): ?>
+                    <div class="error"><?= htmlspecialchars($_COOKIE['error_languages']) ?></div>
+                <?php endif; ?>
 
-            <label for="bio">Биография:</label>
-            <textarea id="bio" name="bio"
-                      class="<?= isset($_COOKIE['error_bio']) ? 'error-field' : '' ?>"><?= htmlspecialchars(getFormData('bio')) ?></textarea>
-            <?php if (isset($_COOKIE['error_bio'])): ?>
-                <div class="error"><?= htmlspecialchars($_COOKIE['error_bio']) ?></div>
-            <?php endif; ?>
+                <label for="bio">Биография:</label>
+                <textarea id="bio" name="bio"
+                        class="<?= isset($_COOKIE['error_bio']) ? 'error-field' : '' ?>"><?= htmlspecialchars(getFormData('bio')) ?></textarea>
+                <?php if (isset($_COOKIE['error_bio'])): ?>
+                    <div class="error"><?= htmlspecialchars($_COOKIE['error_bio']) ?></div>
+                <?php endif; ?>
 
-            <div class="checkbox-group">
-                <input type="checkbox" id="contract" name="contract" value="1"
-                       <?= getFormData('contract') ? 'checked' : '' ?>
-                       class="<?= isset($_COOKIE['error_contract']) ? 'error-field' : '' ?>">
-                <label for="contract">С контрактом ознакомлен(а)</label>
-            </div>
-            <?php if (isset($_COOKIE['error_contract'])): ?>
-                <div class="error"><?= htmlspecialchars($_COOKIE['error_contract']) ?></div>
-            <?php endif; ?>
-        
+                <div class="checkbox-group">
+                    <input type="checkbox" id="contract" name="contract" value="1"
+                        <?= getFormData('contract') ? 'checked' : '' ?>
+                        class="<?= isset($_COOKIE['error_contract']) ? 'error-field' : '' ?>">
+                    <label for="contract">С контрактом ознакомлен(а)</label>
+                </div>
+                <?php if (isset($_COOKIE['error_contract'])): ?>
+                    <div class="error"><?= htmlspecialchars($_COOKIE['error_contract']) ?></div>
+                <?php endif; ?>
+            
 
-        <button type="submit">Сохранить</button>
+            <button type="submit">Сохранить</button>
+        </form>
     </div>
-    </form>
 </body>
 </html>
